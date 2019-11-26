@@ -4,6 +4,44 @@ const {google} = require('googleapis');
 const dfns = require('date-fns')
 
 
+const possibleAssignments = vars => {
+
+  let numVars = vars.length 
+  let columns = []
+  
+  // Permutation table for variables A, B: 
+  //     A  B
+  //     ----
+  //     T  T
+  //     T  F
+  //     F  T
+  
+  // Build 2D array representing *columns* of a permutation table
+  for (let colLength = Math.pow(2, numVars); colLength > 1; colLength /= 2) {
+    let column = []
+    while (column.length < Math.pow(2, numVars)) {
+      for (let i = 0; i < colLength / 2; i++) {
+        column.push(true)
+      }
+      for (let i = 0; i < colLength / 2; i++) {
+        column.push(false)
+      }
+    }
+    columns.push(column)
+  }
+  
+  // Transpose columns into rows of permutation table
+  // and create an assignments object from each e.g. {A: false, B: true, C: false}
+  let assignments = []
+  for (let i = 0; i < Math.pow(2, numVars); i++) {
+    assignments.push(Object.fromEntries(columns.map(c => c[i]).map((v,i) => [vars[i], v])))
+  }
+  return assignments
+}
+
+
+
+
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
 // The file token.json stores the user's access and refresh tokens, and is
@@ -73,9 +111,69 @@ const getAccessToken = (oAuth2Client, callback) => {
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 const listEvents = auth => {
-	const dateRange = {min: dfns.startOfMonth(new Date()), max: dfns.endOfMonth(new Date())}
+  const dateRange = {min: dfns.startOfMonth(new Date()), max: dfns.endOfMonth(new Date())}
   const calendar = google.calendar({version: 'v3', auth})
   
+  const interpretTimeRange = arrInOut => {
+    // AM is true, PM is false
+    let [inTime, outTime] = arrInOut
+    let [inHour, outHour] = arrInOut.map(t => Number(t.split(':')[0]))
+    if (Number.isNaN(outHour)) {
+      outHour = 1199
+    }
+    let possibles
+
+
+    const possibleAssignments = vars => {
+
+      let numVars = vars.length 
+      let columns = []
+      
+      // Permutation table for variables A, B: 
+      //     A  B
+      //     ----
+      //     T  T
+      //     T  F
+      //     F  T
+      
+      // Build 2D array representing *columns* of a permutation table
+      for (let colLength = Math.pow(2, numVars); colLength > 1; colLength /= 2) {
+        let column = []
+        while (column.length < Math.pow(2, numVars)) {
+          for (let i = 0; i < colLength / 2; i++) {
+            column.push(true)
+          }
+          for (let i = 0; i < colLength / 2; i++) {
+            column.push(false)
+          }
+        }
+        columns.push(column)
+      }
+      
+      // Transpose columns into rows of permutation table
+      // and create an assignments object from each e.g. {A: false, B: true, C: false}
+      let assignments = []
+      for (let i = 0; i < Math.pow(2, numVars); i++) {
+        assignments.push(Object.fromEntries(columns.map(c => c[i]).map((v,i) => [vars[i], v])))
+      }
+      return assignments
+    }
+
+    // if (outTime.match(/sh/gi)) {
+
+    possibles = possibleAssignments(['inT', 'outT'])
+
+    for (let p of possibles) {
+      p.inT = (p.inT) ? inHour * 60 : (inHour + 12) * 60
+      p.outT = (p.outT) ? outHour * 60 : (outHour + 12) * 60
+      if (p.outT - p.inT > 120 && p.outT - p.inT < 600  && p.inT > 360 && p.outT < 1320) {
+        inTime = p.inT
+        outTime = p.outT
+      }
+    }
+    return [inTime, outTime].map(t => Math.floor(t / 60).toString().concat(':').concat((t % 60).toString().padStart(2, '0')))
+  }
+
 	// Get list of events with titles beginning with 'Zach'
 	// and write to file shifts.json
   calendar.events.list({
@@ -96,16 +194,20 @@ const listEvents = auth => {
 		 	}).map(event => {
          let {start: date, summary} = event
          const [year, month, day] = date.date.split('-').map(s => Number(s))
-         date = new Date(year, month, day)
+         date = new Date(year, month -  1, day)
+         console.log(date)
          let [start, end] = summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-')
+         let [correctedStart, correctedEnd] = interpretTimeRange([start, end])
          let building = summary.match(/(ah|ct|dh|rw|rs)/gi)[0]
-         return {date, building, start, end}
+         return {date, building, correctedStart, correctedEnd}
 			 })
 			try {
         // Write events to shifts.json
-				fs.writeFileSync('shifts.json', Buffer.from(JSON.stringify(eventList)))
+        fs.writeFileSync('shifts.json', Buffer.from(JSON.stringify(eventList)))
+				console.log(eventList)
+        
 			} catch (err) {
-				console.log(`Error write shifts to file: ${err}`)
+				console.log(`Error writing shifts to file: ${err}`)
 			}
     } else {
       console.log('No upcoming events found.');
