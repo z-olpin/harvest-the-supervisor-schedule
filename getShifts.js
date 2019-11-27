@@ -4,42 +4,6 @@ const {google} = require('googleapis');
 const dfns = require('date-fns')
 
 
-const possibleAssignments = vars => {
-
-  let numVars = vars.length 
-  let columns = []
-  
-  // Permutation table for variables A, B: 
-  //     A  B
-  //     ----
-  //     T  T
-  //     T  F
-  //     F  T
-  
-  // Build 2D array representing *columns* of a permutation table
-  for (let colLength = Math.pow(2, numVars); colLength > 1; colLength /= 2) {
-    let column = []
-    while (column.length < Math.pow(2, numVars)) {
-      for (let i = 0; i < colLength / 2; i++) {
-        column.push(true)
-      }
-      for (let i = 0; i < colLength / 2; i++) {
-        column.push(false)
-      }
-    }
-    columns.push(column)
-  }
-  
-  // Transpose columns into rows of permutation table
-  // and create an assignments object from each e.g. {A: false, B: true, C: false}
-  let assignments = []
-  for (let i = 0; i < Math.pow(2, numVars); i++) {
-    assignments.push(Object.fromEntries(columns.map(c => c[i]).map((v,i) => [vars[i], v])))
-  }
-  return assignments
-}
-
-
 
 
 // If modifying these scopes, delete token.json.
@@ -111,69 +75,38 @@ const getAccessToken = (oAuth2Client, callback) => {
  * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
  */
 const listEvents = auth => {
-  const dateRange = {min: dfns.startOfMonth(new Date()), max: dfns.endOfMonth(new Date())}
   const calendar = google.calendar({version: 'v3', auth})
   
-  const interpretTimeRange = arrInOut => {
-    // AM is true, PM is false
-    let [inTime, outTime] = arrInOut
-    let [inHour, outHour] = arrInOut.map(t => Number(t.split(':')[0]))
-    if (Number.isNaN(outHour)) {
-      outHour = 1199
+  // Make a best guess for AMPM values for two times ([7:00, 3:00]) given consistent schedule patterns
+  const determineAmPm = arrInOut => {
+    const [inMin, outMin] = arrInOut.map(t => Number(t.split(':')[1]) || 0)
+    const [inHour, outHour] = arrInOut.map(t => Number(t.split(':')[0]) || NaN)
+    
+    // Make array of objects representing all possible unique assignments of variables (AM and PM in this case)
+    const assignmentsAmPm = vars => {
+      const numVars = vars.length
+      // Count in binary up to possibleStates ^ numVars
+      const _assignments = [...Array(Math.pow(2, numVars)).keys()]
+      .map(i => (i >>> 0).toString(2).padStart(numVars, '0'))
+      .map(s => s.split('').map(n => (n === '0') ? 'pm' : 'am')) 
+      .map(r => Object.fromEntries(r.map((v,i) => [vars[i], v])))
+      return _assignments
     }
-    let possibles
-
-
-    const possibleAssignments = vars => {
-
-      let numVars = vars.length 
-      let columns = []
-      
-      // Permutation table for variables A, B: 
-      //     A  B
-      //     ----
-      //     T  T
-      //     T  F
-      //     F  T
-      
-      // Build 2D array representing *columns* of a permutation table
-      for (let colLength = Math.pow(2, numVars); colLength > 1; colLength /= 2) {
-        let column = []
-        while (column.length < Math.pow(2, numVars)) {
-          for (let i = 0; i < colLength / 2; i++) {
-            column.push(true)
-          }
-          for (let i = 0; i < colLength / 2; i++) {
-            column.push(false)
-          }
-        }
-        columns.push(column)
-      }
-      
-      // Transpose columns into rows of permutation table
-      // and create an assignments object from each e.g. {A: false, B: true, C: false}
-      let assignments = []
-      for (let i = 0; i < Math.pow(2, numVars); i++) {
-        assignments.push(Object.fromEntries(columns.map(c => c[i]).map((v,i) => [vars[i], v])))
-      }
-      return assignments
-    }
-
-    // if (outTime.match(/sh/gi)) {
-
-    possibles = possibleAssignments(['inT', 'outT'])
-
-    for (let p of possibles) {
-      p.inT = (p.inT) ? inHour * 60 : (inHour + 12) * 60
-      p.outT = (p.outT) ? outHour * 60 : (outHour + 12) * 60
-      if (p.outT - p.inT > 120 && p.outT - p.inT < 600  && p.inT > 360 && p.outT < 1320) {
-        inTime = p.inT
-        outTime = p.outT
+    
+    const assignments = assignmentsAmPm(['inTime', 'outTime'])
+    const SHOW = 20 // 8:00pm, use average show time with no better information
+    
+    for (let a of assignments) {
+      // Convert to 24 hour time
+      a.inTime = (a.inTime === 'am') ? (inHour * 60) + inMin : ((inHour + 12) * 60) + inMin
+      a.outTime = (a.outTime === 'am') ? (outHour * 60) + outMin || SHOW * 60 : (outHour + 12) * 60 + outMin || SHOW * 60 // assume 8pm show time
+      if (a.outTime - a.inTime > 120 && a.outTime - a.inTime < 600  && a.inTime > 360 && a.outTime < 1320) {
+        return [a.inTime, a.outTime].map(t => Math.floor(t / 60).toString().concat(':').concat((t % 60).toString().padStart(2, '0'))) // reformat as HH:MM
       }
     }
-    return [inTime, outTime].map(t => Math.floor(t / 60).toString().concat(':').concat((t % 60).toString().padStart(2, '0')))
   }
-
+  
+  const dateRange = {min: dfns.startOfMonth(new Date()), max: dfns.endOfMonth(new Date())}
 	// Get list of events with titles beginning with 'Zach'
 	// and write to file shifts.json
   calendar.events.list({
@@ -195,11 +128,9 @@ const listEvents = auth => {
          let {start: date, summary} = event
          const [year, month, day] = date.date.split('-').map(s => Number(s))
          date = new Date(year, month -  1, day)
-         console.log(date)
-         let [start, end] = summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-')
-         let [correctedStart, correctedEnd] = interpretTimeRange([start, end])
+         let [start, end] = determineAmPm(summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-'))
          let building = summary.match(/(ah|ct|dh|rw|rs)/gi)[0]
-         return {date, building, correctedStart, correctedEnd}
+         return {date, building, start, end}
 			 })
 			try {
         // Write events to shifts.json
