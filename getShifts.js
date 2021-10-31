@@ -130,35 +130,36 @@ const listEvents = auth => {
 	// and write to file shifts.json
   calendar.events.list({
     calendarId: 's51oii6034fvhudiem3j7t4q2k@group.calendar.google.com',
-		timeMin: dateRange.min.toISOString(),
-		timeMax: dateRange.max.toISOString(),
+    timeMin: dateRange.min.toISOString(),
+    timeMax: dateRange.max.toISOString(),
     singleEvents: true,
-		orderBy: 'startTime'
-  }, (err, res) => {
-		if (err) {
-			console.log(`Error getting events: ${err}`)
-			return
-		}
+    orderBy: 'startTime'
+  },
+  (err, res) => {
+    if (err) {
+      console.log(`Error getting events: ${err}`)
+      return
+    }
     const events = res.data.items;
     if (events.length) {
-     const eventList = events.filter(event => {
-				return event.summary.startsWith('Zach')
-		 	}).map(event => {
-         let {start: date, summary} = event
-         const [year, month, day] = date.date.split('-').map(s => Number(s))
-         date = new Date(year, month -  1, day)
-         let [start, end] = determineAmPm(summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-'))
-         let building = summary.match(/(ah|ct|dh|rw|rs)/gi)[0]
-         return {date, building, start, end}
-			 })
-			try {
+      const eventList =
+        events
+          .filter(event => event.summary.startsWith('Zach'))
+          .map(event => {
+            let {start: date, summary} = event
+            const [year, month, day] = date.date.split('-').map(s => Number(s))
+            date = new Date(year, month -  1, day)
+            let [start, end] = determineAmPm(summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-'))
+            let building = summary.match(/(ah|ct|dh|rw|rs)/gi)[0]
+            return {date, building, start, end}
+	  })
+      try {
         // Write events to shifts.json
         fs.writeFileSync('shifts.json', Buffer.from(JSON.stringify(eventList)))
-				console.log(eventList)
-        
-			} catch (err) {
-				console.log(`Error writing shifts to file: ${err}`)
-			}
+	console.log(eventList)
+      } catch (err) {
+        console.log(`Error writing shifts to file: ${err}`)
+      }
     } else {
       console.log('No upcoming events found.');
     }
