@@ -98,10 +98,29 @@ const listEvents = auth => {
     
     for (let a of assignments) {
       // Convert to 24 hour time
-      a.inTime = (a.inTime === 'am') ? (inHour * 60) + inMin : ((inHour + 12) * 60) + inMin
-      a.outTime = (a.outTime === 'am') ? (outHour * 60) + outMin || SHOW * 60 : (outHour + 12) * 60 + outMin || SHOW * 60 // assume 8pm show time
-      if (a.outTime - a.inTime > 120 && a.outTime - a.inTime < 600  && a.inTime > 360 && a.outTime < 1320) {
-        return [a.inTime, a.outTime].map(t => Math.floor(t / 60).toString().concat(':').concat((t % 60).toString().padStart(2, '0'))) // reformat as HH:MM
+      a.inTime =
+        (a.inTime === 'am')
+          ? (inHour * 60) + inMin
+          : ((inHour + 12) * 60) + inMin
+      a.outTime =
+        (a.outTime === 'am')
+          ? (outHour * 60) + outMin || SHOW * 60
+          : (outHour + 12) * 60 + outMin || SHOW * 60 // assume 8pm show time
+      if (
+           a.outTime - a.inTime > 120 &&
+           a.outTime - a.inTime < 600 &&
+           a.inTime > 360 && a.outTime < 1320
+      ) {
+        return [a.inTime, a.outTime].map(t => {
+          return Math.floor(t / 60)
+            .toString()
+            .concat(
+              ':',
+              (t % 60)
+                .toString()
+                .padStart(2, '0')
+             ) // reformat as HH:MM
+        }
       }
     }
   }
