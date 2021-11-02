@@ -3,14 +3,7 @@ const readline = require('readline');
 const {google} = require('googleapis');
 const dfns = require('date-fns')
 
-
-
-
-// If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
-// The file token.json stores the user's access and refresh tokens, and is
-// created automatically when the authorization flow completes for the first
-// time.
 const TOKEN_PATH = 'token.json';
 
 // Load client secrets from a local file.
@@ -86,11 +79,10 @@ const listEvents = auth => {
     const assignmentsAmPm = vars => {
       const numVars = vars.length
       // Count in binary up to possibleStates ^ numVars
-      const _assignments = [...Array(Math.pow(2, numVars)).keys()]
-      .map(i => (i >>> 0).toString(2).padStart(numVars, '0'))
-      .map(s => s.split('').map(n => (n === '0') ? 'pm' : 'am')) 
-      .map(r => Object.fromEntries(r.map((v,i) => [vars[i], v])))
-      return _assignments
+      return [...Array(Math.pow(2, numVars)).keys()]
+        .map(i => (i >>> 0).toString(2).padStart(numVars, '0'))
+        .map(s => s.split('').map(n => (n === '0') ? 'pm' : 'am')) 
+        .map(r => Object.fromEntries(r.map((v,i) => [vars[i], v])))
     }
     
     const assignments = assignmentsAmPm(['inTime', 'outTime'])
@@ -146,12 +138,22 @@ const listEvents = auth => {
         events
           .filter(event => event.summary.startsWith('Zach'))
           .map(event => {
-            let {start: date, summary} = event
+            const {start_date: date, summary} = event
             const [year, month, day] = date.date.split('-').map(s => Number(s))
-            date = new Date(year, month -  1, day)
-            let [start, end] = determineAmPm(summary.replace(/\s/g,'').match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0].split('-'))
+            const date = new Date(year, month -  1, day)
+            let [start, end] = determineAmPm(
+              summary
+                .replace(/\s/g,'')
+                .match(/\d+:?\d?\d?-(\d+:?\d?\d?|sh)/gi)[0]
+                .split('-')
+            )
             let building = summary.match(/(ah|ct|dh|rw|rs)/gi)[0]
-            return {date, building, start, end}
+            return {
+              date,
+              building,
+              start,
+              end,
+            }
 	  })
       try {
         // Write events to shifts.json
