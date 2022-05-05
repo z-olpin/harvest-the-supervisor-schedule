@@ -1,13 +1,8 @@
 {
-  "name": "calendar",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "harvest-the-supervisor-schedule",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "COMMENCE": "node ./getShifts.js"
   },
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "date-fns": "^2.8.1",
     "googleapis": "^45.0.0"
